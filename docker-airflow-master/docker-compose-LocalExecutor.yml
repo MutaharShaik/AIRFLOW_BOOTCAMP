@@ -1,0 +1,54 @@
+version: '2.1'                   #docker compose file syntax version
+services:
+    postgres:
+        image: postgres:9.6
+        environment:
+            - POSTGRES_USER=airflow
+            - POSTGRES_PASSWORD=airflow
+            - POSTGRES_DB=airflow
+# now add mysql service(with list of parametrs) and also configure SMTP for emailing
+    mysql:
+        image: mysql:5.7     #1st parameter its version  (for any image/name/version check at hub.docker.com)
+#                                 # https://hub.docker.com/_/mysql
+        environment:                # In this environment variables credentials are set.
+            - MYSQL_ROOT_PASSWORD=root       #setting the user variable is optional. for simple we are not creating any user for this app.# as we are not creating the user explicitly, MySQL create root user by default. But password is mandatory variable.
+        volumes:                               # to do transformations, MYSQL container has to read the file from this location to read the input file(csv)
+            - ./store_files:/store_files_mysql/
+            - ./mysql.conf:/etc/mysql/mysql.conf
+        logging:
+            options:
+                max-size: 10m
+                max-file: "3"
+
+    webserver:                                  #This image declarative will pulls the airflow image from the dockerhub.
+        image: puckel/docker-airflow:1.10.4
+        restart: always                          # docker compose v-2 supports restart policies it helps to restart automatically incase if its stops due to any reason.
+        depends_on:                              # depends on: this declartaive sets the services as a dependency for this current container.
+            - postgres                           # here we inform Docker that this service container depends on postgres service to start.
+            - mysql               #adding mysql and make airflow to support and connect with MYSQL DB
+        environment:                             # env directories helps to sets the runtime level options within this container
+            - INSTALL_MYSQL=y    # to import all the relevant components of MYSQL we use in DAG file.
+            - LOAD_EX=n                          # It specifies not to show the airflow example DAGs in the UI DAG list. Example DAG's are in-built DAGs in Airflow for learning purposes. As we set to "n" we dont see any DAG in UI
+            - EXECUTOR=Local                      # specify that we use local Executor with this Airflow setup
+            - AIRFLOW__SMTP__SMTP_HOST=smtp.gmail.com
+            - AIRFLOW__SMTP__SMTP_USER=example@gmail.com
+            - AIRFLOW__SMTP__SMTP_PASSWORD=hgejkggdkatngfwk
+            - AIRFLOW__SMTP__SMTP_PORT=587
+            - AIRFLOW__SMTP__SMTP_MAIL_FROM=Airflow
+        volumes:                                         # volumes directive is used to mount(make accessible) to  a linked path on the host machine so that files and directories placed at the host can be used by docker container.
+            - ./dags:/usr/local/airflow/dags             # here we are mounting the local folder "dags" on to "usr/local/airflow/dags" this docker container loaction
+            - ./store_files:/usr/local/airflow/store_files_airflow
+            - ./sql_files:/usr/local/airflow/sql_files
+        ports:
+            - "8080:8080"
+        command: webserver
+        healthcheck:                                     # this directive indicates if we want a dependency to wait for another conatiner to be healthy
+            test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
+            interval: 30s
+            timeout: 30s
+            retries: 3
+    redis:
+        image: redis:6.2-alpine
+
+
+
